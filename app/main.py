@@ -75,22 +75,32 @@ async def get_cryptocurrency_prices(
             data = response.json()
 
         if not data:
-            raise HTTPException(status_code=404, detail="Данные не найдены")
+            raise HTTPException(
+                status_code=404, detail=f"Криптовалюты не найдены: {ids}. Проверьте правильность написания.")
 
         # Форматируем ответ
+        found_any = False
         result = []
+
         for crypto_id, prices in data.items():
             for currency, price in prices.items():
-                if currency != "last_updated_at":
+                if currency != "last_updated_at" and price is not None:
                     result.append({
                         "cryptocurrency": crypto_id,
                         "currency": currency.upper(),
-                        "current_price": price,
+                        "current_price": float(price) if price else 0,
                         "last_updated": datetime.fromtimestamp(
                             data[crypto_id].get(
                                 "last_updated_at", datetime.now().timestamp())
                         ).isoformat()
                     })
+                    found_any = True
+
+        if not found_any:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Для указанных криптовалют не найдены цены: {ids}"
+            )
 
         logger.info(f"Successfully retrieved {len(result)} price entries")
         return result
@@ -118,6 +128,8 @@ async def get_cryptocurrency_prices(
                 status_code=502,
                 detail=f"Ошибка сервиса CoinGecko: {e.response.status_code}"
             )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
         raise HTTPException(
